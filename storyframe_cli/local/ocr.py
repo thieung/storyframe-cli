@@ -6,12 +6,12 @@ from typing import Iterable
 
 from PIL import Image
 
-from .bootstrap import add_local_v2_dependency_paths
+from .bootstrap import add_local_dependency_paths
 from .models import OcrBox
 from .ocr_filter import is_non_story_noise_box, is_watermark_contaminated_box
 from .text import clean_text
 
-add_local_v2_dependency_paths()
+add_local_dependency_paths()
 
 
 def box_ink_score(frame_path: Path, box: OcrBox) -> float:
@@ -59,7 +59,7 @@ class RapidOcrBackend:
             from rapidocr import RapidOCR
         except Exception as exc:  # pragma: no cover - runtime dependency message.
             raise RuntimeError(
-                "rapidocr is missing. Install local deps into work/.deps/storyframe-local-v2."
+                "rapidocr is missing. Install local deps into work/.deps/storyframe-local."
             ) from exc
         self._engine = RapidOCR()
 
@@ -158,5 +158,5 @@ def box_overlap_ratio(left: OcrBox, right: OcrBox) -> float:
 
 def build_ocr_backend(name: str) -> RapidOcrBackend:
     if name != "rapidocr":
-        raise RuntimeError(f"Unsupported local-v2 OCR backend for MVP: {name}")
+        raise RuntimeError(f"Unsupported local OCR backend for MVP: {name}")
     return RapidOcrBackend()

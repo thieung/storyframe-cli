@@ -4,8 +4,8 @@ import unittest
 
 from pathlib import Path
 
-from storyframe_cli.local_v2.models import FrameObservation, OcrBox, PageInterval, SelectedFrame, TranscriptUnit
-from storyframe_cli.local_v2.selector import (
+from storyframe_cli.local.models import FrameObservation, OcrBox, PageInterval, SelectedFrame, TranscriptUnit
+from storyframe_cli.local.selector import (
     coalesce_same_frame_page_selections,
     filter_units_for_story,
     has_bottom_left_occluded_suffix,
@@ -15,7 +15,7 @@ from storyframe_cli.local_v2.selector import (
     score_observation,
     selected_text_for_unit,
 )
-from storyframe_cli.local_v2.text import clean_text, corrected_text_with_reference, has_reject_phrase
+from storyframe_cli.local.text import clean_text, corrected_text_with_reference, has_reject_phrase
 
 
 def selected(unit_id: str, timestamp: float, text: str) -> SelectedFrame:
@@ -43,7 +43,7 @@ def unit(unit_id: str, start: float, end: float, text: str, source: str = "asr")
     )
 
 
-class LocalV2SelectorTests(unittest.TestCase):
+class LocalSelectorTests(unittest.TestCase):
     def test_repeated_text_far_apart_is_preserved(self) -> None:
         items = [
             selected("asr-0001", 10.0, "I am not scared."),

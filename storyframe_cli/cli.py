@@ -66,7 +66,15 @@ def parse_args() -> argparse.Namespace:
         help="YouTube URL, local video file, or folder containing videos.",
     )
     add_common_args(run_parser)
-    return parser.parse_args()
+    args = parser.parse_args()
+    args.engine = normalize_engine(args.engine)
+    return args
+
+
+def normalize_engine(engine: str) -> str:
+    if engine == "local-v2":
+        return "local"
+    return engine
 
 
 def add_common_args(parser: argparse.ArgumentParser, suppress: bool = False) -> None:
@@ -91,9 +99,9 @@ def add_common_args(parser: argparse.ArgumentParser, suppress: bool = False) -> 
     )
     parser.add_argument(
         "--engine",
-        choices=["legacy", "local-v2"],
+        choices=["legacy", "local", "local-v2"],
         default="legacy",
-        help=help_value or "Frame extraction engine.",
+        help=help_value or "Frame extraction engine. 'local-v2' is accepted as a deprecated alias for 'local'.",
     )
     parser.add_argument(
         "--recursive",
@@ -237,48 +245,48 @@ def add_common_args(parser: argparse.ArgumentParser, suppress: bool = False) -> 
         "--asr-backend",
         choices=["none", "faster-whisper"],
         default="none",
-        help=help_value or "local-v2 ASR backend.",
+        help=help_value or "local ASR backend.",
     )
     parser.add_argument(
         "--asr-model",
         default="small.en",
-        help=help_value or "local-v2 faster-whisper model size/name.",
+        help=help_value or "local faster-whisper model size/name.",
     )
     parser.add_argument(
         "--ocr-backend",
         choices=["rapidocr"],
         default="rapidocr",
-        help=help_value or "local-v2 OCR backend.",
+        help=help_value or "local OCR backend.",
     )
     parser.add_argument(
         "--window-padding",
         type=float,
         default=2.0,
-        help=help_value or "Seconds to expand ASR windows in local-v2.",
+        help=help_value or "Seconds to expand ASR windows in local.",
     )
     parser.add_argument(
         "--page-detection",
         choices=["none", "scene"],
         default="scene",
-        help=help_value or "local-v2 page detector.",
+        help=help_value or "local page detector.",
     )
     parser.add_argument(
         "--page-window-mode",
         choices=["unit", "unit-pages", "all-pages"],
         default="all-pages",
-        help=help_value or "local-v2 page scan strategy after page detection.",
+        help=help_value or "local page scan strategy after page detection.",
     )
     parser.add_argument(
         "--scene-threshold",
         type=float,
         default=12.0,
-        help=help_value or "PySceneDetect content threshold for local-v2 pages.",
+        help=help_value or "PySceneDetect content threshold for local pages.",
     )
     parser.add_argument(
         "--scene-min-len",
         type=int,
         default=8,
-        help=help_value or "Minimum scene length in frames for local-v2 page detection.",
+        help=help_value or "Minimum scene length in frames for local page detection.",
     )
     parser.add_argument(
         "--keep-downloaded-video",
@@ -317,7 +325,7 @@ def run_command(cmd: list[str], cwd: Path | None = None) -> subprocess.Completed
 
 def ensure_system_dependencies(args: argparse.Namespace) -> None:
     required = ["ffmpeg", "ffprobe"]
-    if args.engine in {"legacy", "local-v2"}:
+    if args.engine in {"legacy", "local"}:
         required.append("tesseract")
     missing = [tool for tool in required if shutil.which(tool) is None]
     if missing:
@@ -497,11 +505,11 @@ def run_frame_engine(
     args: argparse.Namespace,
     story_end: float,
 ) -> None:
-    if args.engine == "local-v2":
+    if args.engine == "local":
         cmd = [
             sys.executable,
             "-m",
-            "storyframe_cli.local_v2.engine",
+            "storyframe_cli.local.engine",
             str(video_path),
             "--output-dir",
             str(output_dir),
@@ -538,7 +546,7 @@ def run_frame_engine(
         ]
         proc = subprocess.run(cmd, text=True)
         if proc.returncode != 0:
-            raise RuntimeError(f"local-v2 frame extraction failed for {video_path}")
+            raise RuntimeError(f"local frame extraction failed for {video_path}")
         return
 
     legacy_scan_mode = args.scan_mode.replace("-windowed", "")

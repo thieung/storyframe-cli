@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from PIL import Image
 
+from storyframe_cli.cli import normalize_engine
 from storyframe_cli.extract_story_transcript_frames import (
     FrameCandidate,
     TextItem,
@@ -65,6 +66,11 @@ def candidate(
 
 
 class StoryframeAlgorithmTests(unittest.TestCase):
+    def test_deprecated_engine_name_is_backward_compatible_alias(self) -> None:
+        self.assertEqual(normalize_engine("local-v2"), "local")
+        self.assertEqual(normalize_engine("local"), "local")
+        self.assertEqual(normalize_engine("legacy"), "legacy")
+
     def test_trim_non_story_edges_drops_intro_and_late_title_cards(self) -> None:
         args = make_args()
         selected = [

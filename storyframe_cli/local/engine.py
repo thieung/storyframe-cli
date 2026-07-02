@@ -20,7 +20,7 @@ from .selector import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Local/free Storyframe v2 engine.")
+    parser = argparse.ArgumentParser(description="Local/free Storyframe engine.")
     parser.add_argument("video", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path, required=True)
@@ -62,7 +62,7 @@ def main() -> None:
 
     pages = []
     if args.page_detection == "scene":
-        print("local-v2: detecting scene/page intervals")
+        print("local: detecting scene/page intervals")
         pages = detect_scene_pages(
             args.video,
             args.story_start,
@@ -70,9 +70,9 @@ def main() -> None:
             args.scene_threshold,
             args.scene_min_len,
         )
-        print(f"local-v2: detected_pages={len(pages)}")
+        print(f"local: detected_pages={len(pages)}")
 
-    print("local-v2: building transcript units")
+    print("local: building transcript units")
     units = transcribe_units(
         args.video,
         args.work_dir,
@@ -90,7 +90,7 @@ def main() -> None:
         args.page_window_mode,
     )
     print(
-        f"local-v2: windows={len(windows)} asr_units={len(units)} "
+        f"local: windows={len(windows)} asr_units={len(units)} "
         f"page_window_mode={args.page_window_mode}"
     )
 
@@ -104,29 +104,29 @@ def main() -> None:
         args.dense_fps,
     )
     if not observations:
-        raise SystemExit("local-v2 found no OCR observations")
+        raise SystemExit("local found no OCR observations")
     observations = assign_observation_pages(observations, pages)
     ocr_units = derive_units_from_observations(observations)
 
     if units:
         units = refine_asr_units_with_ocr(units, observations)
-        print(f"local-v2: refined_asr_units={len(units)} with OCR plateau text")
+        print(f"local: refined_asr_units={len(units)} with OCR plateau text")
         before_merge = len(units)
         units = merge_units_with_ocr_missing(units, ocr_units)
-        print(f"local-v2: merged_ocr_missing={len(units) - before_merge}")
+        print(f"local: merged_ocr_missing={len(units) - before_merge}")
     else:
         units = ocr_units
-        print(f"local-v2: derived_units={len(units)} from OCR temporal tracks")
+        print(f"local: derived_units={len(units)} from OCR temporal tracks")
     before_filter = len(units)
     units = filter_units_for_story(units, args.story_start, story_end)
-    print(f"local-v2: filtered_story_units={len(units)} dropped={before_filter - len(units)}")
+    print(f"local: filtered_story_units={len(units)} dropped={before_filter - len(units)}")
 
     selected = select_frames(units, observations, args.quality, pages)
     if not selected:
-        raise SystemExit("local-v2 selected no frames")
+        raise SystemExit("local selected no frames")
 
     write_outputs(args.output_dir, selected, units, observations, pages)
-    print(f"local-v2 selected frames: {len(selected)}")
+    print(f"local selected frames: {len(selected)}")
     print(f"Output: {args.output_dir}")
     print(f"Contact sheet: {args.output_dir / 'review-contact-sheet.jpg'}")
     print(f"Index CSV: {args.output_dir / 'review-index.csv'}")

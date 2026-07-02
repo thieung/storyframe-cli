@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .bootstrap import add_local_v2_dependency_paths
+from .bootstrap import add_local_dependency_paths
 from .models import PageInterval
 
-add_local_v2_dependency_paths()
+add_local_dependency_paths()
 
 
 def detect_scene_pages(
@@ -19,7 +19,7 @@ def detect_scene_pages(
         from scenedetect import SceneManager, open_video
         from scenedetect.detectors import ContentDetector
     except Exception as exc:
-        print(f"local-v2: scene detection unavailable, using one page window: {exc}")
+        print(f"local: scene detection unavailable, using one page window: {exc}")
         return [PageInterval("page-0001", story_start, story_end, "fallback")]
 
     try:
@@ -31,7 +31,7 @@ def detect_scene_pages(
         scene_manager.detect_scenes(video=video, show_progress=False)
         raw_scenes = scene_manager.get_scene_list()
     except Exception as exc:
-        print(f"local-v2: scene detection failed, using one page window: {exc}")
+        print(f"local: scene detection failed, using one page window: {exc}")
         return [PageInterval("page-0001", story_start, story_end, "fallback")]
 
     pages: list[PageInterval] = []

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .bootstrap import add_local_v2_dependency_paths
+from .bootstrap import add_local_dependency_paths
 from .media import extract_audio_wav
 from .models import TranscriptUnit
 from .text import clean_text, has_reject_phrase
 
-add_local_v2_dependency_paths()
+add_local_dependency_paths()
 
 
 def transcribe_units(
@@ -27,7 +27,7 @@ def transcribe_units(
         from faster_whisper import WhisperModel
     except Exception as exc:  # pragma: no cover - runtime dependency message.
         raise RuntimeError(
-            "faster-whisper is missing. Install local deps into work/.deps/storyframe-local-v2."
+            "faster-whisper is missing. Install local deps into work/.deps/storyframe-local."
         ) from exc
 
     audio_path = work_dir / "audio" / "story.wav"

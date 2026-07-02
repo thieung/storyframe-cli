@@ -70,7 +70,7 @@ def collect_observations(
     dense_fps: float,
 ) -> list[FrameObservation]:
     backend = build_ocr_backend(ocr_backend_name)
-    frame_dir = work_dir / "local-v2-frames"
+    frame_dir = work_dir / "local-frames"
     if frame_dir.exists():
         shutil.rmtree(frame_dir)
     frame_dir.mkdir(parents=True, exist_ok=True)
@@ -94,7 +94,7 @@ def collect_observations(
                 observations.append(observation)
             done += 1
             if done % 25 == 0 or done == total:
-                print(f"local-v2 OCR {done}/{total} observations={len(observations)}")
+                print(f"local OCR {done}/{total} observations={len(observations)}")
     return sorted(observations, key=lambda item: item.timestamp)
 
 
@@ -897,7 +897,7 @@ def write_outputs(
         writer.writeheader()
         writer.writerows(rows)
 
-    (output_dir / "debug-local-v2.json").write_text(
+    (output_dir / "debug-local.json").write_text(
         json.dumps(
             {
                 "units": [asdict(unit) for unit in units],

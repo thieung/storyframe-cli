@@ -14,7 +14,7 @@ The default mode is designed for strict review workflows:
 - preserve OCR-only pages when audio does not cover the on-screen text
 - produce `frames/*.jpg`, `<video-name>.pdf`, `<video-name>.mp3`,
   `review-index.csv`, `review-index.md`, `review-contact-sheet.jpg`, and
-  `debug-local-v2.json`
+  `debug-local.json`
 
 ## Status
 
@@ -22,11 +22,13 @@ This is a local/free extraction tool built around FFmpeg, local ASR, OCR, and
 image scoring. It is tuned for narrated children's storybook videos where the
 actual text is rendered on the video frames.
 
-The current recommended engine is `local-v2` with `strict-complete` quality.
+The current recommended engine is `local` with `strict-complete` quality.
+Older commands that use `--engine local-v2` still work as a deprecated alias,
+but new scripts should use `--engine local`.
 
 ## How It Works
 
-`local-v2` combines four local signals:
+`local` combines four local signals:
 
 1. ASR timing from `faster-whisper`
 2. OCR observations from `rapidocr` / ONNX Runtime
@@ -58,14 +60,17 @@ Install package:
 
 ```bash
 cd storyframe-cli
-python3 -m pip install -e ".[local-v2]"
+python3 -m pip install -e ".[local]"
 ```
 
-For this workspace, local dependencies were installed into:
+For this workspace, local dependencies can be installed into:
 
 ```text
-/Users/thieunv/Documents/Codex/2026-07-01/pha/work/.deps/storyframe-local-v2
+/Users/thieunv/Documents/Codex/2026-07-01/pha/work/.deps/storyframe-local
 ```
+
+The runtime also checks the older `storyframe-local-v2` dependency directory for
+backward compatibility, so existing local installs do not need to be recreated.
 
 ## Quick Start
 
@@ -73,7 +78,7 @@ YouTube URL:
 
 ```bash
 storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --engine local-v2 \
+  --engine local \
   --asr-backend faster-whisper \
   --asr-model small.en \
   --ocr-backend rapidocr \
@@ -89,7 +94,7 @@ Single local video:
 
 ```bash
 storyframe run "/path/to/book.mp4" \
-  --engine local-v2 \
+  --engine local \
   --asr-backend faster-whisper \
   --asr-model small.en \
   --ocr-backend rapidocr \
@@ -105,7 +110,7 @@ Folder batch:
 ```bash
 storyframe run "/path/to/video-folder" \
   --recursive \
-  --engine local-v2 \
+  --engine local \
   --asr-backend faster-whisper \
   --asr-model small.en \
   --ocr-backend rapidocr \
@@ -129,7 +134,7 @@ outputs/storyframe-runs/
     ├── review-index.csv
     ├── review-index.md
     ├── review-contact-sheet.jpg
-    ├── debug-local-v2.json
+    ├── debug-local.json
     └── manifest.json
 ```
 
@@ -137,7 +142,7 @@ When `--keep-work` is set, raw scanned frames are kept under the configured
 work root:
 
 ```text
-<work-root>/engine/<video-slug>/local-v2-frames/
+<work-root>/engine/<video-slug>/local-frames/
 ```
 
 Keeping work files is useful when tuning the algorithm because later rebuilds can
@@ -197,7 +202,7 @@ storyframe run "/path/to/book.mp4" --scan-mode sampled --fps 4
 # Safer dense mode.
 storyframe run "/path/to/book.mp4" --scan-mode dense --dense-fps 8
 
-# Recommended local-v2 mode.
+# Recommended local mode.
 storyframe run "/path/to/book.mp4" --scan-mode dense-windowed --dense-fps 8
 
 # Exhaustive source-frame scan. Slow.
@@ -250,7 +255,7 @@ Run with an explicit story window:
 storyframe run "/path/to/book.mp4" \
   --story-start 14 \
   --story-end 175 \
-  --engine local-v2 \
+  --engine local \
   --asr-backend faster-whisper \
   --ocr-backend rapidocr
 ```
@@ -259,7 +264,7 @@ Use a smaller ASR model for speed:
 
 ```bash
 storyframe run "/path/to/book.mp4" \
-  --engine local-v2 \
+  --engine local \
   --asr-backend faster-whisper \
   --asr-model base.en
 ```
@@ -268,7 +273,7 @@ Run OCR-only smoke mode:
 
 ```bash
 storyframe run "/path/to/book.mp4" \
-  --engine local-v2 \
+  --engine local \
   --asr-backend none \
   --ocr-backend rapidocr
 ```
@@ -303,7 +308,7 @@ Run the package without installing the console script:
 
 ```bash
 python3 -m storyframe_cli run "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --engine local-v2 \
+  --engine local \
   --asr-backend faster-whisper \
   --ocr-backend rapidocr
 ```
@@ -314,7 +319,7 @@ Project layout:
 storyframe_cli/
 ├── cli.py
 ├── extract_story_transcript_frames.py
-└── local_v2/
+└── local/
     ├── asr.py
     ├── engine.py
     ├── media.py
@@ -325,7 +330,7 @@ storyframe_cli/
     ├── selector.py
     └── text.py
 tests/
-├── test_local_v2_selector.py
+├── test_local_selector.py
 └── test_storyframe_algorithm.py
 ```
 
@@ -334,6 +339,12 @@ tests/
 `No module named storyframe_cli`
 
 Install editable package or set `PYTHONPATH`:
+
+```bash
+python3 -m pip install -e ".[local]"
+```
+
+The old extra name still works as a compatibility alias:
 
 ```bash
 python3 -m pip install -e ".[local-v2]"
@@ -371,7 +382,7 @@ Too many `needs_review` rows:
 
 - inspect `review-contact-sheet.jpg`
 - inspect `review-index.csv`
-- compare selected frames against raw frames in `local-v2-frames`
+- compare selected frames against raw frames in `local-frames`
 - rerun with `--scan-mode native-windowed` only for difficult videos
 
 ## Legal Note
