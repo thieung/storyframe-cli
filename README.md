@@ -11,6 +11,14 @@ Supports:
 - single local video files
 - folders of videos
 
+## Platforms
+
+| Platform | Status |
+| --- | --- |
+| macOS | Supported and tested. |
+| Linux | Supported if system packages are installed. |
+| Windows | Not directly tested; use WSL2/Linux. |
+
 ## Install
 
 ```bash
@@ -19,6 +27,20 @@ python3 -m pip install -e ".[local]"
 ```
 
 Python 3.11+ is required.
+
+Linux system packages:
+
+```bash
+sudo apt-get install ffmpeg tesseract-ocr
+```
+
+Python dependencies installed by `.[local]`:
+
+- base: `liteparse`, `numpy`, `opencv-python-headless`, `pillow`, `yt-dlp`
+- local pipeline: `faster-whisper`, `imagehash`, `pytesseract`, `rapidocr`,
+  `rapidfuzz`, `scenedetect`, `scikit-image`
+
+`faster-whisper` downloads the selected ASR model on first use.
 
 ## Usage
 

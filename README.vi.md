@@ -11,6 +11,14 @@ Hỗ trợ:
 - một file video local
 - folder chứa nhiều video
 
+## Platforms
+
+| Platform | Trạng thái |
+| --- | --- |
+| macOS | Hỗ trợ và đã test. |
+| Linux | Hỗ trợ nếu đã cài system packages. |
+| Windows | Chưa test trực tiếp; nên dùng WSL2/Linux. |
+
 ## Cài Đặt
 
 ```bash
@@ -19,6 +27,20 @@ python3 -m pip install -e ".[local]"
 ```
 
 Cần Python 3.11+.
+
+System packages trên Linux:
+
+```bash
+sudo apt-get install ffmpeg tesseract-ocr
+```
+
+Python dependencies được cài bởi `.[local]`:
+
+- base: `liteparse`, `numpy`, `opencv-python-headless`, `pillow`, `yt-dlp`
+- local pipeline: `faster-whisper`, `imagehash`, `pytesseract`, `rapidocr`,
+  `rapidfuzz`, `scenedetect`, `scikit-image`
+
+`faster-whisper` sẽ download ASR model được chọn ở lần chạy đầu tiên.
 
 ## Cách Dùng
 
