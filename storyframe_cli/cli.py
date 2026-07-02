@@ -46,7 +46,19 @@ class JobResult:
     status: str
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+    show_advanced = "--advanced-help" in raw_args
+    if show_advanced:
+        raw_args = ["--help" if arg == "--advanced-help" else arg for arg in raw_args]
+
+    parser = build_parser(show_advanced=show_advanced)
+    args = parser.parse_args(raw_args)
+    args.engine = normalize_engine(args.engine)
+    return args
+
+
+def build_parser(show_advanced: bool = False) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="storyframe",
         description=(
@@ -65,10 +77,14 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="YouTube URL, local video file, or folder containing videos.",
     )
-    add_common_args(run_parser)
-    args = parser.parse_args()
-    args.engine = normalize_engine(args.engine)
-    return args
+    if not show_advanced:
+        run_parser.add_argument(
+            "--advanced-help",
+            action="store_true",
+            help="Show all engine, OCR, ASR, and tuning flags.",
+        )
+    add_common_args(run_parser, show_advanced=show_advanced)
+    return parser
 
 
 def normalize_engine(engine: str) -> str:
@@ -77,68 +93,74 @@ def normalize_engine(engine: str) -> str:
     return engine
 
 
-def add_common_args(parser: argparse.ArgumentParser, suppress: bool = False) -> None:
-    help_value = argparse.SUPPRESS if suppress else None
+def add_common_args(parser: argparse.ArgumentParser, show_advanced: bool = False) -> None:
+    def help_for(text: str, *, advanced: bool = False) -> str:
+        if advanced and not show_advanced:
+            return argparse.SUPPRESS
+        return text
+
     parser.add_argument(
         "--output-root",
         type=Path,
         default=Path.cwd() / "outputs" / "storyframe-runs",
-        help=help_value or "Root directory for per-video outputs.",
+        help=help_for("Root directory for per-video outputs."),
     )
     parser.add_argument(
         "--work-root",
         type=Path,
         default=None,
-        help=help_value or "Root directory for temporary downloads/work files.",
+        help=help_for("Root directory for temporary downloads/work files.", advanced=True),
     )
     parser.add_argument(
         "--engine-script",
         type=Path,
         default=Path(__file__).with_name("extract_story_transcript_frames.py"),
-        help=help_value or "Path to the frame extraction engine script.",
+        help=help_for("Path to the frame extraction engine script.", advanced=True),
     )
     parser.add_argument(
         "--engine",
         choices=["legacy", "local", "local-v2"],
-        default="legacy",
-        help=help_value or "Frame extraction engine. 'local-v2' is accepted as a deprecated alias for 'local'.",
+        default="local",
+        help=help_for(
+            "Frame extraction engine. 'local-v2' is accepted as a deprecated alias for 'local'.",
+            advanced=True,
+        ),
     )
     parser.add_argument(
         "--recursive",
         action="store_true",
-        help=help_value or "When a source is a folder, recursively scan videos.",
+        help=help_for("When a source is a folder, recursively scan videos."),
     )
     parser.add_argument(
         "--fps",
         type=float,
         default=4.0,
-        help=help_value or "Frame sample rate passed to the extraction engine.",
+        help=help_for("Frame sample rate passed to the extraction engine.", advanced=True),
     )
     parser.add_argument(
         "--scan-mode",
         choices=["sampled", "dense", "native", "dense-windowed", "native-windowed"],
-        default="sampled",
-        help=(
-            help_value
-            or (
+        default="dense-windowed",
+        help=help_for(
+            (
                 "Frame scan strategy. sampled uses --fps; dense raises sampling "
                 "to --dense-fps; native scans every source video frame."
-            )
+            ),
+            advanced=True,
         ),
     )
     parser.add_argument(
         "--dense-fps",
         type=float,
         default=8.0,
-        help=help_value or "Minimum OCR sample rate for --scan-mode dense.",
+        help=help_for("Minimum OCR sample rate for --scan-mode dense.", advanced=True),
     )
     parser.add_argument(
         "--quality",
         choices=["strict-complete", "strict-original", "balanced"],
         default="strict-complete",
-        help=(
-            help_value
-            or (
+        help=help_for(
+            (
                 "Extraction quality mode. strict-complete is default and reconstructs "
                 "unresolved fade frames to avoid missing transcript lines."
             )
@@ -148,35 +170,35 @@ def add_common_args(parser: argparse.ArgumentParser, suppress: bool = False) -> 
         "--story-start",
         type=float,
         default=0.0,
-        help=help_value or "Story start time in seconds.",
+        help=help_for("Story start time in seconds.", advanced=True),
     )
     parser.add_argument(
         "--story-end",
         type=float,
         default=None,
-        help=help_value or "Story end time in seconds. Defaults to video duration.",
+        help=help_for("Story end time in seconds. Defaults to video duration.", advanced=True),
     )
     parser.add_argument(
         "--title-start",
         type=float,
         default=0.0,
-        help=help_value or "Optional title intro start time.",
+        help=help_for("Optional title intro start time.", advanced=True),
     )
     parser.add_argument(
         "--title-end",
         type=float,
         default=0.0,
-        help=help_value or "Optional title intro end time.",
+        help=help_for("Optional title intro end time.", advanced=True),
     )
     parser.add_argument(
         "--include-title-intro",
         action="store_true",
-        help=help_value or "Keep title intro frames in addition to story frames.",
+        help=help_for("Keep title intro frames in addition to story frames.", advanced=True),
     )
     parser.add_argument(
         "--audio-bitrate",
         default="192k",
-        help=help_value or "MP3 bitrate for extracted audio.",
+        help=help_for("MP3 bitrate for extracted audio.", advanced=True),
     )
     parser.add_argument(
         "--youtube-format",
@@ -185,53 +207,52 @@ def add_common_args(parser: argparse.ArgumentParser, suppress: bool = False) -> 
             "bv*[height<=720][ext=mp4]+ba/"
             "best[height<=720][ext=mp4]/best[height<=720]/best"
         ),
-        help=(
-            help_value
-            or "yt-dlp format selector. Defaults to MP4/H.264 <=720p for faster OCR-friendly downloads."
+        help=help_for(
+            "yt-dlp format selector. Defaults to MP4/H.264 <=720p for faster OCR-friendly downloads.",
+            advanced=True,
         ),
     )
     parser.add_argument(
         "--download-cache-dir",
         type=Path,
         default=None,
-        help=(
-            help_value
-            or "Directory for cached YouTube videos. Defaults to <output-root>/_youtube-cache."
+        help=help_for(
+            "Directory for cached YouTube videos. Defaults to <output-root>/_youtube-cache."
         ),
     )
     parser.add_argument(
         "--redownload",
         action="store_true",
-        help=help_value or "Ignore cached YouTube files and download again.",
+        help=help_for("Ignore cached YouTube files and download again."),
     )
     parser.add_argument(
         "--playlist",
         action="store_true",
-        help=help_value or "Allow YouTube playlist downloads.",
+        help=help_for("Allow YouTube playlist downloads.", advanced=True),
     )
     parser.add_argument(
         "--cookies",
         type=Path,
         default=None,
-        help=help_value or "Cookies file for yt-dlp when YouTube requires login.",
+        help=help_for("Cookies file for yt-dlp when YouTube requires login.", advanced=True),
     )
     parser.add_argument(
         "--cookies-from-browser",
         default=None,
-        help=help_value or "Browser name for yt-dlp cookies, e.g. chrome.",
+        help=help_for("Browser name for yt-dlp cookies, e.g. chrome."),
     )
     parser.add_argument(
         "--keep-work",
         action="store_true",
-        help=help_value or "Keep temporary engine work directories.",
+        help=help_for("Keep temporary engine work directories."),
     )
     parser.add_argument(
         "--no-polish-transcripts",
         dest="polish_transcripts",
         action="store_false",
-        help=(
-            help_value
-            or "Disable final high-confidence OCR transcript cleanup after frame selection."
+        help=help_for(
+            "Disable final high-confidence OCR transcript cleanup after frame selection.",
+            advanced=True,
         ),
     )
     parser.set_defaults(polish_transcripts=True)
@@ -239,61 +260,64 @@ def add_common_args(parser: argparse.ArgumentParser, suppress: bool = False) -> 
         "--transcript-polish-min-conf",
         type=float,
         default=0.80,
-        help=help_value or "Minimum Tesseract confidence for transcript cleanup, 0.0-1.0.",
+        help=help_for(
+            "Minimum Tesseract confidence for transcript cleanup, 0.0-1.0.",
+            advanced=True,
+        ),
     )
     parser.add_argument(
         "--asr-backend",
         choices=["none", "faster-whisper"],
-        default="none",
-        help=help_value or "local ASR backend.",
+        default="faster-whisper",
+        help=help_for("local ASR backend.", advanced=True),
     )
     parser.add_argument(
         "--asr-model",
         default="small.en",
-        help=help_value or "local faster-whisper model size/name.",
+        help=help_for("local faster-whisper model size/name.", advanced=True),
     )
     parser.add_argument(
         "--ocr-backend",
         choices=["rapidocr"],
         default="rapidocr",
-        help=help_value or "local OCR backend.",
+        help=help_for("local OCR backend.", advanced=True),
     )
     parser.add_argument(
         "--window-padding",
         type=float,
         default=2.0,
-        help=help_value or "Seconds to expand ASR windows in local.",
+        help=help_for("Seconds to expand ASR windows in local.", advanced=True),
     )
     parser.add_argument(
         "--page-detection",
         choices=["none", "scene"],
         default="scene",
-        help=help_value or "local page detector.",
+        help=help_for("local page detector.", advanced=True),
     )
     parser.add_argument(
         "--page-window-mode",
         choices=["unit", "unit-pages", "all-pages"],
         default="all-pages",
-        help=help_value or "local page scan strategy after page detection.",
+        help=help_for("local page scan strategy after page detection.", advanced=True),
     )
     parser.add_argument(
         "--scene-threshold",
         type=float,
         default=12.0,
-        help=help_value or "PySceneDetect content threshold for local pages.",
+        help=help_for("PySceneDetect content threshold for local pages.", advanced=True),
     )
     parser.add_argument(
         "--scene-min-len",
         type=int,
         default=8,
-        help=help_value or "Minimum scene length in frames for local page detection.",
+        help=help_for("Minimum scene length in frames for local page detection.", advanced=True),
     )
     parser.add_argument(
         "--keep-downloaded-video",
         action="store_true",
-        help=(
-            help_value
-            or "Deprecated: YouTube downloads are cached by default. Kept for compatibility."
+        help=help_for(
+            "Deprecated: YouTube downloads are cached by default. Kept for compatibility.",
+            advanced=True,
         ),
     )
 

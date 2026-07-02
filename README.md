@@ -1,5 +1,7 @@
 # Storyframe CLI
 
+[Tiếng Việt](README.vi.md)
+
 Storyframe CLI extracts clean story-text frames from read-aloud videos, exports
 the story audio as MP3, and packages the selected frames into a reviewable PDF.
 It supports local video files, folders of videos, and YouTube URLs with a local
@@ -22,7 +24,15 @@ This is a local/free extraction tool built around FFmpeg, local ASR, OCR, and
 image scoring. It is tuned for narrated children's storybook videos where the
 actual text is rendered on the video frames.
 
-The current recommended engine is `local` with `strict-complete` quality.
+The default run already uses the recommended local pipeline:
+
+- `local` engine
+- `strict-complete` quality
+- `dense-windowed` OCR scan
+- `faster-whisper` ASR
+- `rapidocr` OCR
+- scene/page detection with `all-pages`
+
 Older commands that use `--engine local-v2` still work as a deprecated alias,
 but new scripts should use `--engine local`.
 
@@ -72,54 +82,59 @@ For this workspace, local dependencies can be installed into:
 The runtime also checks the older `storyframe-local-v2` dependency directory for
 backward compatibility, so existing local installs do not need to be recreated.
 
-## Quick Start
+## Basic Usage
+
+You normally only pass the source.
 
 YouTube URL:
 
 ```bash
-storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --engine local \
-  --asr-backend faster-whisper \
-  --asr-model small.en \
-  --ocr-backend rapidocr \
-  --scan-mode dense-windowed \
-  --page-detection scene \
-  --page-window-mode all-pages \
-  --download-cache-dir outputs/storyframe-youtube-cache \
-  --output-root outputs/storyframe-runs \
-  --keep-work
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
 Single local video:
 
 ```bash
-storyframe run "/path/to/book.mp4" \
-  --engine local \
-  --asr-backend faster-whisper \
-  --asr-model small.en \
-  --ocr-backend rapidocr \
-  --scan-mode dense-windowed \
-  --page-detection scene \
-  --page-window-mode all-pages \
-  --output-root outputs/storyframe-runs \
-  --keep-work
+storyframe run "/path/to/book.mp4"
 ```
 
 Folder batch:
 
 ```bash
-storyframe run "/path/to/video-folder" \
-  --recursive \
-  --engine local \
-  --asr-backend faster-whisper \
-  --asr-model small.en \
-  --ocr-backend rapidocr \
-  --scan-mode dense-windowed \
-  --page-detection scene \
-  --page-window-mode all-pages \
-  --output-root outputs/storyframe-runs \
-  --keep-work
+storyframe run "/path/to/video-folder"
 ```
+
+Add `--recursive` only when the folder contains nested folders.
+
+Outputs are written to:
+
+```text
+outputs/storyframe-runs/<video-name>/
+```
+
+The main artifacts are:
+
+- `<video-name>.mp3`
+- `<video-name>.pdf`
+- `frames/*.jpg`
+- `review-index.csv`
+- `review-contact-sheet.jpg`
+
+Common optional flags:
+
+```bash
+# Pick another output folder.
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --output-root runs
+
+# Use Chrome cookies if YouTube asks for login.
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --cookies-from-browser chrome
+
+# Keep raw scanned frames and debug work files.
+storyframe run "/path/to/book.mp4" --keep-work
+```
+
+Run `storyframe run --help` for basic options.
+Run `storyframe run --advanced-help` for engine/OCR/ASR tuning flags.
 
 ## Output Layout
 
@@ -154,28 +169,23 @@ YouTube downloads use `yt-dlp`. The tool has no built-in download limit, but
 YouTube may still rate-limit, block, or require cookies.
 
 By default, YouTube videos are cached under `<output-root>/_youtube-cache`.
-Use a shared cache path to avoid repeat downloads:
+Use a shared cache path to avoid repeat downloads across output folders:
 
 ```bash
 storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --download-cache-dir outputs/storyframe-youtube-cache \
-  --output-root outputs/storyframe-runs
+  --download-cache-dir outputs/storyframe-youtube-cache
 ```
 
 Force a fresh download:
 
 ```bash
-storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --redownload \
-  --output-root outputs/storyframe-runs
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --redownload
 ```
 
 Use browser cookies if YouTube requires login:
 
 ```bash
-storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --cookies-from-browser chrome \
-  --output-root outputs/storyframe-runs
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --cookies-from-browser chrome
 ```
 
 ## Quality Modes
@@ -209,7 +219,7 @@ storyframe run "/path/to/book.mp4" --scan-mode dense-windowed --dense-fps 8
 storyframe run "/path/to/book.mp4" --scan-mode native
 ```
 
-For broad generality across Vooks-style videos, use:
+The default is already tuned for broad generality across Vooks-style videos:
 
 ```bash
 --scan-mode dense-windowed --dense-fps 8 --page-window-mode all-pages
@@ -254,18 +264,13 @@ Run with an explicit story window:
 ```bash
 storyframe run "/path/to/book.mp4" \
   --story-start 14 \
-  --story-end 175 \
-  --engine local \
-  --asr-backend faster-whisper \
-  --ocr-backend rapidocr
+  --story-end 175
 ```
 
 Use a smaller ASR model for speed:
 
 ```bash
 storyframe run "/path/to/book.mp4" \
-  --engine local \
-  --asr-backend faster-whisper \
   --asr-model base.en
 ```
 
@@ -273,9 +278,7 @@ Run OCR-only smoke mode:
 
 ```bash
 storyframe run "/path/to/book.mp4" \
-  --engine local \
-  --asr-backend none \
-  --ocr-backend rapidocr
+  --asr-backend none
 ```
 
 ## Review Files
@@ -308,9 +311,7 @@ Run the package without installing the console script:
 
 ```bash
 python3 -m storyframe_cli run "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --engine local \
-  --asr-backend faster-whisper \
-  --ocr-backend rapidocr
+  --output-root outputs/storyframe-runs
 ```
 
 Project layout:

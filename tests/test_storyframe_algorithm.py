@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,7 +9,7 @@ from types import SimpleNamespace
 
 from PIL import Image
 
-from storyframe_cli.cli import normalize_engine
+from storyframe_cli.cli import build_parser, normalize_engine, parse_args
 from storyframe_cli.extract_story_transcript_frames import (
     FrameCandidate,
     TextItem,
@@ -66,10 +68,46 @@ def candidate(
 
 
 class StoryframeAlgorithmTests(unittest.TestCase):
+    def test_run_defaults_use_generic_local_pipeline(self) -> None:
+        args = parse_args(["run", "https://www.youtube.com/watch?v=example"])
+
+        self.assertEqual(args.engine, "local")
+        self.assertEqual(args.asr_backend, "faster-whisper")
+        self.assertEqual(args.scan_mode, "dense-windowed")
+        self.assertEqual(args.quality, "strict-complete")
+        self.assertEqual(args.page_window_mode, "all-pages")
+
     def test_deprecated_engine_name_is_backward_compatible_alias(self) -> None:
         self.assertEqual(normalize_engine("local-v2"), "local")
         self.assertEqual(normalize_engine("local"), "local")
         self.assertEqual(normalize_engine("legacy"), "legacy")
+
+    def test_basic_help_hides_engine_tuning_flags(self) -> None:
+        parser = build_parser(show_advanced=False)
+        output = io.StringIO()
+
+        with self.assertRaises(SystemExit):
+            with contextlib.redirect_stdout(output):
+                parser.parse_args(["run", "--help"])
+
+        help_text = output.getvalue()
+        self.assertIn("--advanced-help", help_text)
+        self.assertNotIn("--engine", help_text)
+        self.assertNotIn("--asr-backend", help_text)
+        self.assertNotIn("--scan-mode", help_text)
+
+    def test_advanced_help_shows_engine_tuning_flags(self) -> None:
+        parser = build_parser(show_advanced=True)
+        output = io.StringIO()
+
+        with self.assertRaises(SystemExit):
+            with contextlib.redirect_stdout(output):
+                parser.parse_args(["run", "--help"])
+
+        help_text = output.getvalue()
+        self.assertIn("--engine", help_text)
+        self.assertIn("--asr-backend", help_text)
+        self.assertIn("--scan-mode", help_text)
 
     def test_trim_non_story_edges_drops_intro_and_late_title_cards(self) -> None:
         args = make_args()
