@@ -68,6 +68,12 @@ Videos without on-frame story text:
 storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --caption-mode force
 ```
 
+Faster reruns for YouTube:
+
+```bash
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --speed auto
+```
+
 Nested folders:
 
 ```bash
@@ -116,6 +122,35 @@ review-contact-sheet.jpg
 manifest.json
 ```
 
+## CPU Usage
+
+Storyframe is local/free, so the first run can use a lot of CPU. The heavy
+steps are OCR over sampled frames, scene/page detection, and local ASR when no
+YouTube captions are available.
+
+Recommended command for YouTube videos:
+
+```bash
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --speed auto
+```
+
+`--speed auto` uses YouTube captions when available and keeps an OCR/frame
+cache under `<output-root>/_work/cache`, so rerunning the same video is much
+lighter.
+
+If your machine gets too hot, cap CPU threads:
+
+```bash
+OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 \
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --speed auto
+```
+
+For videos with no story text on screen, use caption rendering:
+
+```bash
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --speed auto --caption-mode force
+```
+
 ## Useful Options
 
 ```bash
@@ -131,6 +166,9 @@ storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --cookies-from-browser
 
 # Render transcript captions when the video has no story text on frames.
 storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --caption-mode force
+
+# Use YouTube captions when available and reuse OCR/frame cache.
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --speed auto
 
 # Keep raw scanned frames and work files for debugging.
 storyframe run "/path/to/book.mp4" --keep-work
@@ -155,8 +193,10 @@ storyframe run --advanced-help
   story text on frames.
 - Use `--caption-mode force` for videos with no on-frame story text. Use
   `--caption-mode auto` only when you want Storyframe to detect that case.
+- Use `--speed auto` to skip local ASR when YouTube captions are available and
+  reuse OCR/frame cache on reruns. If captions are unavailable, it uses an
+  OCR-first fallback for videos that already show story text on screen.
 - YouTube downloads are cached under `<output-root>/_youtube-cache`.
-- This is a local/free pipeline, so CPU usage can be high on long videos.
 - Only process videos you have the right to download, transform, and store.
 
 ## Development

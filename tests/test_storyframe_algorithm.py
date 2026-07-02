@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 from PIL import Image
 
-from storyframe_cli.cli import build_parser, parse_args
+from storyframe_cli.cli import build_parser, find_caption_for_video_path, parse_args
 from storyframe_cli.extract_story_transcript_frames import (
     FrameCandidate,
     TextItem,
@@ -75,7 +75,20 @@ class StoryframeAlgorithmTests(unittest.TestCase):
         self.assertEqual(args.scan_mode, "dense-windowed")
         self.assertEqual(args.quality, "strict-complete")
         self.assertEqual(args.caption_mode, "off")
+        self.assertEqual(args.speed, "quality")
         self.assertEqual(args.page_window_mode, "all-pages")
+
+    def test_speed_auto_can_be_enabled_for_cached_caption_fast_path(self) -> None:
+        args = parse_args(
+            [
+                "run",
+                "https://www.youtube.com/watch?v=example",
+                "--speed",
+                "auto",
+            ]
+        )
+
+        self.assertEqual(args.speed, "auto")
 
     def test_caption_mode_can_force_transcript_rendering(self) -> None:
         args = parse_args(
@@ -100,6 +113,7 @@ class StoryframeAlgorithmTests(unittest.TestCase):
         help_text = output.getvalue()
         self.assertIn("--advanced-help", help_text)
         self.assertIn("--caption-mode", help_text)
+        self.assertIn("--speed", help_text)
         self.assertNotIn("--asr-backend", help_text)
         self.assertNotIn("--scan-mode", help_text)
 
@@ -114,6 +128,18 @@ class StoryframeAlgorithmTests(unittest.TestCase):
         help_text = output.getvalue()
         self.assertIn("--asr-backend", help_text)
         self.assertIn("--scan-mode", help_text)
+
+    def test_cached_caption_lookup_prefers_english_vtt_next_to_video(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            video = temp / "Story Title-abc123.mp4"
+            video.write_bytes(b"video")
+            generic_caption = temp / "Story Title-abc123.vtt"
+            english_caption = temp / "Story Title-abc123.en.vtt"
+            generic_caption.write_text("WEBVTT\n", encoding="utf-8")
+            english_caption.write_text("WEBVTT\n", encoding="utf-8")
+
+            self.assertEqual(find_caption_for_video_path(video), english_caption)
 
     def test_trim_non_story_edges_drops_intro_and_late_title_cards(self) -> None:
         args = make_args()

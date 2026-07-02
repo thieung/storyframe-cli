@@ -51,13 +51,14 @@ def sentence_is_complete(text: str) -> bool:
 
 def make_sentence_unit(parts: list[TranscriptUnit], index: int) -> TranscriptUnit:
     text = normalize_sentence_text(" ".join(part.text.strip() for part in parts if part.text.strip()))
+    source = parts[0].source if parts else "asr"
     return TranscriptUnit(
         unit_id=f"caption-{index:04d}",
         text=text,
         normalized_text=clean_text(text),
         start=parts[0].start,
         end=parts[-1].end,
-        source="asr-caption",
+        source=f"{source}-caption",
     )
 
 

@@ -23,6 +23,15 @@ from .selector import (
     select_frames,
     write_outputs,
 )
+from .subtitles import load_subtitle_units
+
+
+def should_skip_asr_for_speed_auto(args: argparse.Namespace) -> bool:
+    return (
+        args.speed == "auto"
+        and args.caption_mode == "off"
+        and args.asr_backend != "none"
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,6 +62,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scene-threshold", type=float, default=12.0)
     parser.add_argument("--scene-min-len", type=int, default=8)
     parser.add_argument("--caption-mode", choices=["off", "auto", "force"], default="off")
+    parser.add_argument("--speed", choices=["quality", "auto"], default="quality")
+    parser.add_argument("--subtitle-path", type=Path, default=None)
+    parser.add_argument("--cache-dir", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -80,14 +92,29 @@ def main() -> None:
         print(f"local: detected_pages={len(pages)}")
 
     print("local: building transcript units")
-    units = transcribe_units(
-        args.video,
-        args.work_dir,
-        args.story_start,
-        story_end,
-        args.asr_backend,
-        args.asr_model,
-    )
+    units = []
+    if args.speed == "auto" and args.subtitle_path and args.subtitle_path.exists():
+        units = load_subtitle_units(args.subtitle_path, args.story_start, story_end)
+        if units:
+            print(f"local: using subtitle transcript units={len(units)} from {args.subtitle_path}")
+        else:
+            print(f"local: subtitle file had no usable story units: {args.subtitle_path}")
+    if not units:
+        asr_backend = args.asr_backend
+        if should_skip_asr_for_speed_auto(args):
+            asr_backend = "none"
+            print(
+                "local: speed=auto has no usable subtitles; "
+                "skipping local ASR and deriving transcript from OCR"
+            )
+        units = transcribe_units(
+            args.video,
+            args.work_dir,
+            args.story_start,
+            story_end,
+            asr_backend,
+            args.asr_model,
+        )
     windows = make_windows(units, args.story_start, story_end, args.window_padding)
     windows = expand_windows_to_pages(
         windows,
@@ -141,6 +168,7 @@ def main() -> None:
         args.scan_mode,
         args.fps,
         args.dense_fps,
+        cache_dir=args.cache_dir if args.speed == "auto" else None,
     )
     if args.caption_mode == "auto" and should_use_caption_fallback(caption_units, observations):
         selected = select_caption_frames(args.video, args.work_dir, caption_units)

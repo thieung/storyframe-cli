@@ -46,6 +46,14 @@ class JobResult:
     status: str
 
 
+@dataclass
+class ExpandedSource:
+    source: str
+    video_path: Path
+    downloaded: bool
+    subtitle_path: Path | None = None
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     raw_args = list(sys.argv[1:] if argv is None else argv)
     show_advanced = "--advanced-help" in raw_args
@@ -152,6 +160,17 @@ def add_common_args(parser: argparse.ArgumentParser, show_advanced: bool = False
                 "Render ASR transcript captions onto frames. off is default for videos "
                 "that already have story text; auto detects missing on-frame text; "
                 "force skips OCR and renders captions directly."
+            )
+        ),
+    )
+    parser.add_argument(
+        "--speed",
+        choices=["quality", "auto"],
+        default="quality",
+        help=help_for(
+            (
+                "Runtime preset. quality keeps the full local pipeline; auto reuses "
+                "YouTube captions and OCR/frame cache when available."
             )
         ),
     )
@@ -364,6 +383,40 @@ def find_cached_youtube_video(cache_dir: Path, video_id: str | None) -> Path | N
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
+def find_cached_youtube_caption(cache_dir: Path, video_id: str | None) -> Path | None:
+    if not video_id or not cache_dir.exists():
+        return None
+    candidates = [
+        path
+        for path in cache_dir.glob(f"*-{video_id}*.vtt")
+        if path.is_file() and path.stat().st_size > 0
+    ]
+    if not candidates:
+        return None
+    return best_caption_candidate(candidates)
+
+
+def find_caption_for_video_path(video_path: Path) -> Path | None:
+    candidates = [
+        path
+        for path in video_path.parent.glob(f"{video_path.stem}*.vtt")
+        if path.is_file() and path.stat().st_size > 0
+    ]
+    if not candidates:
+        return None
+    return best_caption_candidate(candidates)
+
+
+def best_caption_candidate(candidates: list[Path]) -> Path:
+    def rank(path: Path) -> tuple[int, float]:
+        name = path.name.lower()
+        english_bonus = 2 if ".en" in name else 0
+        generated_penalty = -1 if ".orig." in name else 0
+        return english_bonus + generated_penalty, path.stat().st_mtime
+
+    return max(candidates, key=rank)
+
+
 def slugify(value: str, fallback: str = "video") -> str:
     value = value.lower()
     value = re.sub(r"[^a-z0-9]+", "-", value)
@@ -459,12 +512,62 @@ def download_youtube(url: str, args: argparse.Namespace, cache_dir: Path) -> lis
     return paths
 
 
-def expand_sources(args: argparse.Namespace, youtube_cache_dir: Path) -> list[tuple[str, Path, bool]]:
-    expanded: list[tuple[str, Path, bool]] = []
+def download_youtube_captions(url: str, args: argparse.Namespace, cache_dir: Path) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    video_id = youtube_video_id(url)
+    if not args.redownload and find_cached_youtube_caption(cache_dir, video_id):
+        return
+
+    outtmpl = cache_dir / "%(title).200B-%(id)s.%(ext)s"
+    cmd = [
+        sys.executable,
+        "-m",
+        "yt_dlp",
+        "--skip-download",
+        "--write-subs",
+        "--write-auto-subs",
+        "--sub-langs",
+        "en.*,en",
+        "--sub-format",
+        "vtt",
+        "--convert-subs",
+        "vtt",
+        "-o",
+        str(outtmpl),
+    ]
+    if not args.playlist:
+        cmd.append("--no-playlist")
+    if args.cookies:
+        cmd += ["--cookies", str(args.cookies)]
+    if args.cookies_from_browser:
+        cmd += ["--cookies-from-browser", args.cookies_from_browser]
+    cmd.append(url)
+
+    try:
+        run_command(cmd)
+    except RuntimeError as exc:
+        print(
+            f"WARNING: could not download YouTube captions; continuing with local processing.\n{exc}",
+            file=sys.stderr,
+        )
+
+
+def expand_sources(args: argparse.Namespace, youtube_cache_dir: Path) -> list[ExpandedSource]:
+    expanded: list[ExpandedSource] = []
     for source in args.sources:
         if is_url(source):
-            for video_path in download_youtube(source, args, youtube_cache_dir):
-                expanded.append((source, video_path, True))
+            video_paths = download_youtube(source, args, youtube_cache_dir)
+            if args.speed == "auto":
+                download_youtube_captions(source, args, youtube_cache_dir)
+            for video_path in video_paths:
+                subtitle_path = (
+                    find_caption_for_video_path(video_path)
+                    if args.speed == "auto"
+                    else None
+                )
+                if subtitle_path is not None:
+                    print(f"Using cached YouTube captions: {subtitle_path}", flush=True)
+                expanded.append(ExpandedSource(source, video_path, True, subtitle_path))
             continue
 
         path = Path(source).expanduser().resolve()
@@ -473,10 +576,10 @@ def expand_sources(args: argparse.Namespace, youtube_cache_dir: Path) -> list[tu
             if not videos:
                 print(f"No videos found in folder: {path}", file=sys.stderr)
             for video_path in videos:
-                expanded.append((str(path), video_path, False))
+                expanded.append(ExpandedSource(str(path), video_path, False))
             continue
         if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS:
-            expanded.append((str(path), path, False))
+            expanded.append(ExpandedSource(str(path), path, False))
             continue
         print(f"Skipping unsupported source: {source}", file=sys.stderr)
     return expanded
@@ -486,6 +589,8 @@ def run_frame_engine(
     video_path: Path,
     output_dir: Path,
     work_dir: Path,
+    cache_dir: Path | None,
+    subtitle_path: Path | None,
     args: argparse.Namespace,
     story_end: float,
 ) -> None:
@@ -512,6 +617,8 @@ def run_frame_engine(
         args.quality,
         "--caption-mode",
         args.caption_mode,
+        "--speed",
+        args.speed,
         "--asr-backend",
         args.asr_backend,
         "--asr-model",
@@ -529,6 +636,10 @@ def run_frame_engine(
         "--scene-min-len",
         str(args.scene_min_len),
     ]
+    if cache_dir is not None:
+        cmd += ["--cache-dir", str(cache_dir)]
+    if subtitle_path is not None:
+        cmd += ["--subtitle-path", str(subtitle_path)]
     proc = subprocess.run(cmd, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"Frame extraction failed for {video_path}")
@@ -585,6 +696,7 @@ def process_video(
     source: str,
     video_path: Path,
     downloaded: bool,
+    subtitle_path: Path | None,
     args: argparse.Namespace,
     output_root: Path,
     work_root: Path,
@@ -599,7 +711,16 @@ def process_video(
     effective_story_end = args.story_end
     if effective_story_end is None:
         effective_story_end = video_duration(video_path)
-    run_frame_engine(video_path, output_dir, work_dir, args, effective_story_end)
+    cache_dir = work_root / "cache" if args.speed == "auto" else None
+    run_frame_engine(
+        video_path,
+        output_dir,
+        work_dir,
+        cache_dir,
+        subtitle_path,
+        args,
+        effective_story_end,
+    )
 
     artifact_stem = output_dir.name
     mp3_path = output_dir / f"{artifact_stem}.mp3"
@@ -649,14 +770,22 @@ def main() -> None:
 
     results: list[JobResult] = []
     failures = 0
-    for source, video_path, downloaded in jobs:
+    for job in jobs:
         try:
             results.append(
-                process_video(source, video_path, downloaded, args, output_root, work_root)
+                process_video(
+                    job.source,
+                    job.video_path,
+                    job.downloaded,
+                    job.subtitle_path,
+                    args,
+                    output_root,
+                    work_root,
+                )
             )
         except Exception as exc:
             failures += 1
-            print(f"FAILED: {video_path}\n{exc}", file=sys.stderr)
+            print(f"FAILED: {job.video_path}\n{exc}", file=sys.stderr)
 
     manifest_path = output_root / "manifest.json"
     manifest_path.write_text(

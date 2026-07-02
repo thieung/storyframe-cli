@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import subprocess
@@ -54,6 +55,18 @@ def video_fps(video_path: Path) -> float:
     top, bottom = rate.split("/", 1)
     value = float(top) / max(1.0, float(bottom))
     return value if value > 0 else 24.0
+
+
+def video_fingerprint(video_path: Path) -> str:
+    stat = video_path.stat()
+    payload = "|".join(
+        [
+            str(video_path.resolve()),
+            str(stat.st_size),
+            str(stat.st_mtime_ns),
+        ]
+    )
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:20]
 
 
 def extract_audio_wav(video_path: Path, output_path: Path, start: float, end: float) -> None:

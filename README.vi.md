@@ -68,6 +68,12 @@ Video không có text truyện sẵn trên frame:
 storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --caption-mode force
 ```
 
+Chạy nhanh hơn khi rerun YouTube:
+
+```bash
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --speed auto
+```
+
 Folder có thư mục con:
 
 ```bash
@@ -116,6 +122,34 @@ review-contact-sheet.jpg
 manifest.json
 ```
 
+## CPU Usage
+
+Storyframe chạy local/free, nên lần chạy đầu có thể dùng CPU cao. Các bước nặng
+là OCR trên nhiều frame, scene/page detection, và local ASR nếu video không có
+YouTube captions.
+
+Command khuyến nghị cho video YouTube:
+
+```bash
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --speed auto
+```
+
+`--speed auto` dùng YouTube captions nếu có và lưu OCR/frame cache trong
+`<output-root>/_work/cache`, nên rerun cùng video sẽ nhẹ hơn nhiều.
+
+Nếu máy quá nóng, giới hạn số CPU threads:
+
+```bash
+OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 \
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --speed auto
+```
+
+Với video không có text truyện sẵn trên màn hình, dùng caption rendering:
+
+```bash
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --speed auto --caption-mode force
+```
+
 ## Options Hay Dùng
 
 ```bash
@@ -131,6 +165,9 @@ storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --cookies-from-browser
 
 # Render transcript caption khi video không có text truyện sẵn trên frame.
 storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --caption-mode force
+
+# Dùng YouTube captions nếu có và reuse OCR/frame cache.
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --speed auto
 
 # Giữ raw scanned frames và work files để debug.
 storyframe run "/path/to/book.mp4" --keep-work
@@ -155,8 +192,10 @@ storyframe run --advanced-help
   sẵn trên frame.
 - Dùng `--caption-mode force` cho video không có text truyện sẵn trên frame.
   Chỉ dùng `--caption-mode auto` khi muốn Storyframe tự detect case đó.
+- Dùng `--speed auto` để bỏ qua ASR local khi YouTube có captions, và reuse
+  OCR/frame cache khi rerun. Nếu không có captions, tool dùng fallback
+  OCR-first cho video đã có text truyện trên màn hình.
 - Video YouTube được cache tại `<output-root>/_youtube-cache`.
-- Pipeline chạy local/free nên CPU có thể cao với video dài.
 - Chỉ xử lý video mà bạn có quyền download, transform, và lưu trữ.
 
 ## Development

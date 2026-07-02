@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from PIL import Image
 
@@ -13,17 +14,22 @@ from storyframe_cli.local.captions import (
     sample_transcript_units,
     should_use_caption_fallback,
 )
+from storyframe_cli.local.engine import should_skip_asr_for_speed_auto
 from storyframe_cli.local.models import FrameObservation, OcrBox, PageInterval, SelectedFrame, TranscriptUnit
 from storyframe_cli.local.selector import (
     coalesce_same_frame_page_selections,
     filter_units_for_story,
     has_bottom_left_occluded_suffix,
+    load_cached_observation,
     merge_units_with_ocr_missing,
     observation_from_boxes,
     prune_duplicate_selections,
+    reconstruct_occluded_text_if_needed,
     score_observation,
     selected_text_for_unit,
+    write_cached_observation,
 )
+from storyframe_cli.local.subtitles import load_subtitle_units, parse_webvtt
 from storyframe_cli.local.text import clean_text, corrected_text_with_reference, has_reject_phrase
 
 
@@ -67,6 +73,40 @@ def observation(timestamp: float, text: str) -> FrameObservation:
 
 
 class LocalSelectorTests(unittest.TestCase):
+    def test_speed_auto_default_uses_ocr_first_when_subtitles_are_unavailable(self) -> None:
+        args = SimpleNamespace(
+            speed="auto",
+            caption_mode="off",
+            asr_backend="faster-whisper",
+        )
+
+        self.assertTrue(should_skip_asr_for_speed_auto(args))
+
+    def test_speed_auto_keeps_asr_when_caption_rendering_needs_transcript(self) -> None:
+        args = SimpleNamespace(
+            speed="auto",
+            caption_mode="force",
+            asr_backend="faster-whisper",
+        )
+
+        self.assertFalse(should_skip_asr_for_speed_auto(args))
+
+    def test_ocr_only_selection_is_not_text_reconstructed(self) -> None:
+        item = selected("ocr-0001", 12.0, "Willis: I'll slide down the chimney just like that pig!")
+        item.normalized_text = "willis i'll slide down the chimney just like that pig"
+        observation_item = observation(12.0, "that pig")
+        observation_item.boxes = [
+            OcrBox("pig", 0.99, 120, 650, 70, 32, 1280, 720, 0.9),
+        ]
+
+        changed = reconstruct_occluded_text_if_needed(
+            Path("unused.jpg"),
+            item,
+            observation_item,
+        )
+
+        self.assertFalse(changed)
+
     def test_asr_fragments_are_merged_into_complete_caption_sentence(self) -> None:
         merged = merge_transcript_units_into_sentences(
             [
@@ -121,6 +161,48 @@ class LocalSelectorTests(unittest.TestCase):
         sampled = sample_transcript_units(units, 4)
 
         self.assertEqual([item.unit_id for item in sampled], ["asr-0000", "asr-0003", "asr-0006", "asr-0009"])
+
+    def test_webvtt_subtitles_are_loaded_as_story_units(self) -> None:
+        vtt = """WEBVTT
+
+00:00:01.000 --> 00:00:02.500
+Where is kitty?
+
+00:00:03.000 --> 00:00:04.000
+[Music]
+
+00:00:05.000 --> 00:00:06.000
+Subscribe now.
+"""
+        cues = parse_webvtt(vtt)
+
+        self.assertEqual(len(cues), 2)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            subtitle_path = Path(temp_dir) / "sample.en.vtt"
+            subtitle_path.write_text(vtt, encoding="utf-8")
+
+            units = load_subtitle_units(subtitle_path, 0.0, 10.0)
+
+        self.assertEqual([item.normalized_text for item in units], ["where is kitty"])
+        self.assertEqual(units[0].source, "subtitle")
+
+    def test_ocr_observation_cache_round_trips_without_work_dir_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_path = Path(temp_dir) / "ocr.json"
+            cached_frame = Path(temp_dir) / "cache-frame.jpg"
+            loaded_frame = Path(temp_dir) / "loaded-frame.jpg"
+            item = observation(12.5, "Where is kitty?")
+            item.frame_path = str(cached_frame)
+
+            write_cached_observation(cache_path, item)
+            loaded_frame.write_bytes(b"frame")
+            cached, loaded = load_cached_observation(cache_path, loaded_frame)
+
+        self.assertTrue(cached)
+        self.assertIsNotNone(loaded)
+        assert loaded is not None
+        self.assertEqual(loaded.frame_path, str(loaded_frame))
+        self.assertEqual(loaded.normalized_text, "where is kitty")
 
     def test_repeated_text_far_apart_is_preserved(self) -> None:
         items = [

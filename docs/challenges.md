@@ -28,7 +28,7 @@ These videos were used as practical evidence while tuning behavior:
 | Duplicate vs repeated text | Same sentence can be repeated legitimately in different scenes. | Prune near-duplicate/subset states in the same moment; preserve repeated text far apart. | Very similar pages close together can be ambiguous. |
 | OCR noise | Decorative art, logo, and partial crops can produce extra words. | Reject known non-story phrases; score extra text and low confidence; keep review metadata. | Noisy fonts or handwriting can still require manual review. |
 | YouTube rate limits | Repeated downloads trigger rate limits or login prompts. | Cache downloads under `_youtube-cache`; support `--cookies-from-browser`. | YouTube policy or extractor changes can still break download. |
-| CPU/runtime | Dense OCR plus local ASR is compute-heavy. | Default balances completeness with page windows; thread env vars can reduce CPU heat. | Batch runs should use a VPS with enough CPU/RAM. |
+| CPU/runtime | Dense OCR plus local ASR is compute-heavy. | Default keeps quality; `--speed auto` can skip local ASR from cached YouTube captions and reuse OCR/frame cache on reruns. | First run still does dense OCR when on-frame story text must be verified. |
 | CLI surface complexity | Too many flags made normal usage confusing. | Default command now runs the recommended pipeline; tuning flags live behind `--advanced-help`. | Advanced tuning still needs operator judgment for hard videos. |
 | Output artifacts in Git | MP3/PDF are binary, heavy, and may include copyrighted content. | Do not commit generated media; keep metadata/docs in Git and store artifacts externally if needed. | Sample artifacts require rights review before sharing. |
 
@@ -36,6 +36,7 @@ These videos were used as practical evidence while tuning behavior:
 
 - Treat Storyframe as a fresh tool; no public v1/v2 or migration wording.
 - Keep basic usage one command: `storyframe run <source>`.
+- Keep `--speed auto` additive: faster when subtitles/cache exist, fallback-safe when they do not.
 - Keep generated MP3/PDF out of Git by default.
 - Keep evidence URLs in docs instead of committing generated outputs.
 

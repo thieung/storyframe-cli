@@ -9,12 +9,15 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .media import extract_frame, scan_fps, timestamps_for_window
+from .media import extract_frame, scan_fps, timestamps_for_window, video_fingerprint
 from .models import FrameObservation, OcrBox, PageInterval, SelectedFrame, TranscriptUnit
 from .ocr import build_ocr_backend
 from .ocr_filter import split_story_and_ad_boxes
 from .captions import render_caption_if_needed
 from .text import clean_text, corrected_text_with_reference, extra_token_ratio, has_reject_phrase, similarity, target_coverage, token_set
+
+
+OCR_CACHE_VERSION = 1
 
 
 def observation_from_boxes(frame_path: Path, timestamp: float, boxes: list[OcrBox]) -> FrameObservation | None:
@@ -69,18 +72,29 @@ def collect_observations(
     scan_mode: str,
     fps: float,
     dense_fps: float,
+    cache_dir: Path | None = None,
 ) -> list[FrameObservation]:
     backend = build_ocr_backend(ocr_backend_name)
-    frame_dir = work_dir / "local-frames"
-    if frame_dir.exists():
-        shutil.rmtree(frame_dir)
-    frame_dir.mkdir(parents=True, exist_ok=True)
+    ocr_cache_dir: Path | None = None
+    if cache_dir is None:
+        frame_dir = work_dir / "local-frames"
+        if frame_dir.exists():
+            shutil.rmtree(frame_dir)
+        frame_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        video_cache_dir = cache_dir / video_fingerprint(video_path) / ocr_backend_name
+        frame_dir = video_cache_dir / "frames"
+        ocr_cache_dir = video_cache_dir / "ocr"
+        frame_dir.mkdir(parents=True, exist_ok=True)
+        ocr_cache_dir.mkdir(parents=True, exist_ok=True)
+        print(f"local: OCR/frame cache={video_cache_dir}")
     effective_fps = scan_fps(scan_mode, fps, dense_fps, video_path)
 
     observations: list[FrameObservation] = []
     seen_timestamps: set[int] = set()
     total = sum(len(timestamps_for_window(start, end, effective_fps)) for start, end in windows)
     done = 0
+    cache_hits = 0
     for start, end in windows:
         for timestamp in timestamps_for_window(start, end, effective_fps):
             key = int(round(timestamp * 1000))
@@ -88,15 +102,92 @@ def collect_observations(
                 continue
             seen_timestamps.add(key)
             frame_path = frame_dir / f"frame-{key:09d}ms.jpg"
-            extract_frame(video_path, timestamp, frame_path)
-            boxes = backend.recognize(frame_path)
-            observation = observation_from_boxes(frame_path, timestamp, boxes)
+            cache_path = ocr_cache_dir / f"ocr-{key:09d}ms.json" if ocr_cache_dir else None
+            cached, observation = load_cached_observation(cache_path, frame_path)
+            if cached:
+                cache_hits += 1
+            else:
+                if not frame_path.exists() or frame_path.stat().st_size == 0:
+                    extract_frame(video_path, timestamp, frame_path)
+                boxes = backend.recognize(frame_path)
+                observation = observation_from_boxes(frame_path, timestamp, boxes)
+                write_cached_observation(cache_path, observation)
             if observation is not None:
                 observations.append(observation)
             done += 1
             if done % 25 == 0 or done == total:
-                print(f"local OCR {done}/{total} observations={len(observations)}")
+                cache_suffix = f" cache_hits={cache_hits}" if ocr_cache_dir else ""
+                print(f"local OCR {done}/{total} observations={len(observations)}{cache_suffix}")
     return sorted(observations, key=lambda item: item.timestamp)
+
+
+def load_cached_observation(
+    cache_path: Path | None,
+    frame_path: Path,
+) -> tuple[bool, FrameObservation | None]:
+    if cache_path is None or not cache_path.exists():
+        return False, None
+    try:
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False, None
+    if payload.get("version") != OCR_CACHE_VERSION:
+        return False, None
+    observation_data = payload.get("observation")
+    if observation_data is None:
+        return True, None
+    if not frame_path.exists() or frame_path.stat().st_size == 0:
+        return False, None
+    return True, frame_observation_from_dict(observation_data, frame_path)
+
+
+def write_cached_observation(
+    cache_path: Path | None,
+    observation: FrameObservation | None,
+) -> None:
+    if cache_path is None:
+        return
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(
+        json.dumps(
+            {
+                "version": OCR_CACHE_VERSION,
+                "observation": asdict(observation) if observation is not None else None,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def frame_observation_from_dict(data: dict, frame_path: Path) -> FrameObservation:
+    return FrameObservation(
+        frame_path=str(frame_path),
+        timestamp=float(data["timestamp"]),
+        text=str(data["text"]),
+        normalized_text=str(data["normalized_text"]),
+        boxes=[ocr_box_from_dict(item) for item in data.get("boxes", [])],
+        avg_confidence=float(data.get("avg_confidence", 0.0)),
+        avg_ink_score=float(data.get("avg_ink_score", 0.0)),
+        word_count=int(data.get("word_count", 0)),
+        visual_hash=str(data.get("visual_hash", "")),
+        page_id=str(data.get("page_id", "")),
+        ad_boxes=[ocr_box_from_dict(item) for item in data.get("ad_boxes", [])],
+    )
+
+
+def ocr_box_from_dict(data: dict) -> OcrBox:
+    return OcrBox(
+        text=str(data["text"]),
+        confidence=float(data["confidence"]),
+        x=float(data["x"]),
+        y=float(data["y"]),
+        width=float(data["width"]),
+        height=float(data["height"]),
+        page_width=float(data["page_width"]),
+        page_height=float(data["page_height"]),
+        ink_score=float(data.get("ink_score", 0.0)),
+    )
 
 
 def derive_units_from_observations(observations: list[FrameObservation]) -> list[TranscriptUnit]:
@@ -964,6 +1055,8 @@ def reconstruct_occluded_text_if_needed(
     item: SelectedFrame,
     observation: FrameObservation | None,
 ) -> bool:
+    if item.unit_id.startswith(("ocr-", "ocr-missing-")):
+        return False
     if has_reject_phrase(item.normalized_text):
         return False
     if observation is None or not observation.boxes:
