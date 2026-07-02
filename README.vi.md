@@ -68,6 +68,29 @@ Folder có thư mục con:
 storyframe run "/path/to/video-folder" --recursive
 ```
 
+## Dùng Với Codex App Hoặc Claude Desktop
+
+Mở repository này làm working folder, rồi dùng một trong các prompt dưới đây.
+Các prompt này giả định app có quyền truy cập file local và terminal.
+
+Chạy với YouTube:
+
+```text
+Cài local dependencies cho repo này, rồi chạy Storyframe với:
+https://www.youtube.com/watch?v=VIDEO_ID
+
+Giữ outputs trong outputs/storyframe-runs, reuse YouTube cache, và không commit
+các file MP3/PDF/JPG generated. Sau khi chạy xong, tóm tắt output folder và các
+dòng bị marked needs_review.
+```
+
+Batch folder:
+
+```text
+Chạy Storyframe cho mọi video trong /path/to/video-folder, có recursive.
+Giữ work files để review, báo lại output paths, và không commit generated media.
+```
+
 ## Output
 
 Mặc định mỗi video ghi vào:

@@ -68,6 +68,29 @@ Nested folders:
 storyframe run "/path/to/video-folder" --recursive
 ```
 
+## Use With Codex App Or Claude Desktop
+
+Open this repository as the working folder, then use one of these prompts.
+These prompts assume the app can access your local files and terminal.
+
+YouTube run:
+
+```text
+Install the local dependencies for this repo, then run Storyframe on:
+https://www.youtube.com/watch?v=VIDEO_ID
+
+Keep outputs under outputs/storyframe-runs, reuse the YouTube cache, and do not
+commit generated MP3/PDF/JPG files. After the run, summarize the output folder
+and any rows marked needs_review.
+```
+
+Folder batch:
+
+```text
+Run Storyframe on every video in /path/to/video-folder recursively.
+Keep work files for review, report the output paths, and do not commit generated media.
+```
+
 ## Output
 
 By default, each video writes to:
