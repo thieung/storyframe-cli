@@ -2,376 +2,108 @@
 
 [Tiếng Việt](README.vi.md)
 
-Storyframe CLI extracts clean story-text frames from read-aloud videos, exports
-the story audio as MP3, and packages the selected frames into a reviewable PDF.
-It supports local video files, folders of videos, and YouTube URLs with a local
-download cache.
+Extract clean story-text frames from read-aloud videos, export the story audio
+as MP3, and package the selected images into a PDF.
 
-The default mode is designed for strict review workflows:
+Supports:
 
-- keep only frames that contain story text
-- avoid duplicate transcript states
-- avoid text while it is still fading in or fading out
-- reject title/outro/ad/promo screens when they are not story content
-- preserve OCR-only pages when audio does not cover the on-screen text
-- produce `frames/*.jpg`, `<video-name>.pdf`, `<video-name>.mp3`,
-  `review-index.csv`, `review-index.md`, `review-contact-sheet.jpg`, and
-  `debug-local.json`
+- YouTube URLs, with local download cache
+- single local video files
+- folders of videos
 
-## Status
-
-This is a local/free extraction tool built around FFmpeg, local ASR, OCR, and
-image scoring. It is tuned for narrated children's storybook videos where the
-actual text is rendered on the video frames.
-
-The default run already uses the recommended local pipeline:
-
-- `strict-complete` quality
-- `dense-windowed` OCR scan
-- `faster-whisper` ASR
-- `rapidocr` OCR
-- scene/page detection with `all-pages`
-
-## How It Works
-
-The extraction pipeline combines four local signals:
-
-1. ASR timing from `faster-whisper`
-2. OCR observations from `rapidocr` / ONNX Runtime
-3. scene/page windows from PySceneDetect
-4. frame scoring based on text coverage, extra text, ink strength, stability,
-   page-edge risk, overlay detection, and duplicate/subset pruning
-
-The selector first tries to find a clean original frame. When a complete text
-state only exists under a small social overlay, it can patch the overlay from a
-nearby clean frame. For bottom-left logo occlusion, it can reconstruct the small
-missing transcript suffix only when the ASR/OCR alignment is confident.
-
-## Requirements
-
-System tools:
+## Install
 
 ```bash
 brew install ffmpeg tesseract
-```
-
-Python:
-
-```bash
-python3 --version
-# Python 3.11 or newer
-```
-
-Install package:
-
-```bash
-cd storyframe-cli
 python3 -m pip install -e ".[local]"
 ```
 
-The `local` extra installs the OCR, ASR, and scene-detection dependencies used
-by the default pipeline.
+Python 3.11+ is required.
 
-## Basic Usage
+## Usage
 
-You normally only pass the source.
-
-YouTube URL:
+YouTube:
 
 ```bash
 storyframe run "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-Single local video:
+Local file:
 
 ```bash
 storyframe run "/path/to/book.mp4"
 ```
 
-Folder batch:
+Folder:
 
 ```bash
 storyframe run "/path/to/video-folder"
 ```
 
-Add `--recursive` only when the folder contains nested folders.
+Nested folders:
 
-Outputs are written to:
+```bash
+storyframe run "/path/to/video-folder" --recursive
+```
+
+## Output
+
+By default, each video writes to:
 
 ```text
 outputs/storyframe-runs/<video-name>/
 ```
 
-The main artifacts are:
+Main files:
 
-- `<video-name>.mp3`
-- `<video-name>.pdf`
-- `frames/*.jpg`
-- `review-index.csv`
-- `review-contact-sheet.jpg`
+```text
+<video-name>.mp3
+<video-name>.pdf
+frames/*.jpg
+review-index.csv
+review-contact-sheet.jpg
+manifest.json
+```
 
-Common optional flags:
+## Useful Options
 
 ```bash
-# Pick another output folder.
+# Choose output directory.
 storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --output-root runs
 
-# Use Chrome cookies if YouTube asks for login.
+# Reuse a shared YouTube cache.
+storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --download-cache-dir outputs/storyframe-youtube-cache
+
+# Use browser cookies if YouTube asks for login.
 storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --cookies-from-browser chrome
 
-# Keep raw scanned frames and debug work files.
+# Keep raw scanned frames and work files for debugging.
 storyframe run "/path/to/book.mp4" --keep-work
 ```
 
-Run `storyframe run --help` for basic options.
-Run `storyframe run --advanced-help` for OCR/ASR tuning flags.
-
-## Output Layout
-
-```text
-outputs/storyframe-runs/
-├── manifest.json
-├── _youtube-cache/
-└── video-name/
-    ├── video-name.mp3
-    ├── video-name.pdf
-    ├── frames/
-    ├── review-index.csv
-    ├── review-index.md
-    ├── review-contact-sheet.jpg
-    ├── debug-local.json
-    └── manifest.json
-```
-
-When `--keep-work` is set, raw scanned frames are kept under the configured
-work root:
-
-```text
-<work-root>/engine/<video-slug>/local-frames/
-```
-
-Keeping work files is useful when tuning the algorithm because later rebuilds can
-reuse raw frames and OCR observations instead of starting from a fresh download.
-
-## YouTube Cache
-
-YouTube downloads use `yt-dlp`. The tool has no built-in download limit, but
-YouTube may still rate-limit, block, or require cookies.
-
-By default, YouTube videos are cached under `<output-root>/_youtube-cache`.
-Use a shared cache path to avoid repeat downloads across output folders:
+Basic help:
 
 ```bash
-storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --download-cache-dir outputs/storyframe-youtube-cache
+storyframe run --help
 ```
 
-Force a fresh download:
+Advanced OCR/ASR tuning flags:
 
 ```bash
-storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --redownload
+storyframe run --advanced-help
 ```
 
-Use browser cookies if YouTube requires login:
+## Notes
 
-```bash
-storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" --cookies-from-browser chrome
-```
-
-## Quality Modes
-
-```bash
-# Default. Preserve transcript states and repair unresolved clean-frame cases.
-storyframe run "/path/to/book.mp4" --quality strict-complete
-
-# Only use original frames. Drop unresolved warning frames.
-storyframe run "/path/to/book.mp4" --quality strict-original
-
-# Keep more candidates for manual review.
-storyframe run "/path/to/book.mp4" --quality balanced
-```
-
-`strict-complete` is the recommended default.
-
-## Scan Modes
-
-```bash
-# Practical sampled mode.
-storyframe run "/path/to/book.mp4" --scan-mode sampled --fps 4
-
-# Safer dense mode.
-storyframe run "/path/to/book.mp4" --scan-mode dense --dense-fps 8
-
-# Recommended local mode.
-storyframe run "/path/to/book.mp4" --scan-mode dense-windowed --dense-fps 8
-
-# Exhaustive source-frame scan. Slow.
-storyframe run "/path/to/book.mp4" --scan-mode native
-```
-
-The default is already tuned for broad generality across Vooks-style videos:
-
-```bash
---scan-mode dense-windowed --dense-fps 8 --page-window-mode all-pages
-```
-
-## CPU And VPS Notes
-
-This tool intentionally runs local/free. CPU usage can be high because every
-selected video may require local audio transcription plus thousands of OCR
-inference calls.
-
-For an 8-minute video at `--dense-fps 8`, expect roughly:
-
-```text
-8 minutes * 60 seconds * 8 fps = 3840 candidate frames
-```
-
-Recommended minimum for one worker:
-
-- 6 vCPU
-- 12 GB RAM
-- NVMe storage
-
-Better for sustained batch runs:
-
-- 8 vCPU / 16 GB RAM for one comfortable worker
-- 12+ vCPU / 24-32 GB RAM for two workers
-
-Thread limiting can reduce heat at the cost of runtime:
-
-```bash
-OMP_NUM_THREADS=2 \
-MKL_NUM_THREADS=2 \
-OPENBLAS_NUM_THREADS=2 \
-storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" ...
-```
-
-## Common Commands
-
-Run with an explicit story window:
-
-```bash
-storyframe run "/path/to/book.mp4" \
-  --story-start 14 \
-  --story-end 175
-```
-
-Use a smaller ASR model for speed:
-
-```bash
-storyframe run "/path/to/book.mp4" \
-  --asr-model base.en
-```
-
-Run OCR-only smoke mode:
-
-```bash
-storyframe run "/path/to/book.mp4" \
-  --asr-backend none
-```
-
-## Review Files
-
-`review-index.csv` is the main audit file. Important columns:
-
-- `index`: frame order
-- `timestamp`: chosen source timestamp
-- `unit_id`: ASR/OCR temporal unit
-- `image`: extracted frame path
-- `transcript`: selected raw/corrected transcript text
-- `normalized_text`: cleaned text used for matching
-- `score`: selector score
-- `status`: `clean` or `needs_review`
-- `warnings`: low coverage, low ink, low stability, extra text, page edge, etc.
-- `output_source`: original, overlay-cleaned, text-reconstructed, etc.
-- `page_id`: scene/page interval
-
-`review-contact-sheet.jpg` gives a fast visual overview of the run.
+- `strict-complete` is the default quality mode.
+- YouTube downloads are cached under `<output-root>/_youtube-cache`.
+- This is a local/free pipeline, so CPU usage can be high on long videos.
+- Only process videos you have the right to download, transform, and store.
 
 ## Development
 
-Run tests:
-
 ```bash
 python3 -m unittest discover -s tests
+python3 -m storyframe_cli run "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
-
-Run the package without installing the console script:
-
-```bash
-python3 -m storyframe_cli run "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --output-root outputs/storyframe-runs
-```
-
-Project layout:
-
-```text
-storyframe_cli/
-├── cli.py
-├── extract_story_transcript_frames.py
-└── local/
-    ├── asr.py
-    ├── engine.py
-    ├── media.py
-    ├── models.py
-    ├── ocr.py
-    ├── ocr_filter.py
-    ├── page_detection.py
-    ├── selector.py
-    └── text.py
-tests/
-├── test_local_selector.py
-└── test_storyframe_algorithm.py
-```
-
-## Troubleshooting
-
-`No module named storyframe_cli`
-
-Install editable package or set `PYTHONPATH`:
-
-```bash
-python3 -m pip install -e ".[local]"
-```
-
-`yt-dlp` fails
-
-Update `yt-dlp`:
-
-```bash
-python3 -m pip install -U "yt-dlp[default]"
-```
-
-YouTube asks for login:
-
-```bash
-storyframe run "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --cookies-from-browser chrome
-```
-
-CPU is too high:
-
-```bash
-OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 storyframe run ...
-```
-
-Run is too slow:
-
-- keep `--keep-work`
-- reuse `--download-cache-dir`
-- lower `--dense-fps`
-- use `--page-window-mode unit-pages` when ASR coverage is reliable
-
-Too many `needs_review` rows:
-
-- inspect `review-contact-sheet.jpg`
-- inspect `review-index.csv`
-- compare selected frames against raw frames in `local-frames`
-- rerun with `--scan-mode native-windowed` only for difficult videos
-
-## Legal Note
-
-Only process videos you have the right to download, transform, and store. The
-tool does not grant rights to third-party video, audio, artwork, or transcript
-content.
