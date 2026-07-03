@@ -21,18 +21,30 @@ Hỗ trợ:
 
 ## Cài Đặt
 
+System packages trên macOS:
+
 ```bash
 brew install ffmpeg tesseract
-python3 -m pip install -e ".[local]"
 ```
-
-Cần Python 3.11+.
 
 System packages trên Linux:
 
 ```bash
 sudo apt-get install ffmpeg tesseract-ocr
 ```
+
+Clone repo và cài Python package:
+
+```bash
+git clone https://github.com/thieung/storyframe-cli.git
+cd storyframe-cli
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -e ".[local]"
+```
+
+Cần Python 3.11+.
 
 Python dependencies được cài bởi `.[local]`:
 

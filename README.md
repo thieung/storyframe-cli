@@ -21,18 +21,30 @@ Supports:
 
 ## Install
 
+macOS system packages:
+
 ```bash
 brew install ffmpeg tesseract
-python3 -m pip install -e ".[local]"
 ```
-
-Python 3.11+ is required.
 
 Linux system packages:
 
 ```bash
 sudo apt-get install ffmpeg tesseract-ocr
 ```
+
+Clone and install:
+
+```bash
+git clone https://github.com/thieung/storyframe-cli.git
+cd storyframe-cli
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -e ".[local]"
+```
+
+Python 3.11+ is required.
 
 Python dependencies installed by `.[local]`:
 
