@@ -5,6 +5,10 @@
 Trích xuất frame có chữ truyện sạch từ video read-aloud, xuất audio truyện
 thành MP3, và đóng gói các ảnh đã chọn thành PDF.
 
+<p align="center">
+  <img src="docs/assets/storyframe-cli-overview.png" alt="Tổng quan Storyframe CLI" width="720">
+</p>
+
 Hỗ trợ:
 
 - link YouTube, có cache local để tránh tải lại

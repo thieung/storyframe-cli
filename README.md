@@ -5,6 +5,10 @@
 Extract clean story-text frames from read-aloud videos, export the story audio
 as MP3, and package the selected images into a PDF.
 
+<p align="center">
+  <img src="docs/assets/storyframe-cli-overview.png" alt="Storyframe CLI overview" width="720">
+</p>
+
 Supports:
 
 - YouTube URLs, with local download cache
